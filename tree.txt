@@ -1,0 +1,44 @@
+wsi_project/
+├── data/                       # [KHÔNG PUSH LÊN GIT] Chứa toàn bộ dữ liệu
+│   ├── raw_wsi/                # Các file ảnh gốc khổng lồ (.svs, .tif, .ndpi)
+│   ├── masks/                  # Ảnh mặt nạ nhị phân từ bước Tissue Segmentation
+│   ├── h5_features/            # Các file đặc trưng và tọa độ (.h5) đã trích xuất
+│   ├── reference/              # Chứa các ảnh mẫu chuẩn (vd: ảnh để train Stain Normalizer)
+│   └── labels/                 # File CSV/Excel chứa nhãn bệnh lý (slide_id, label)
+│
+├── src/                        # Chứa mã nguồn chính của pipeline
+│   ├── preprocessing/          # Các module phục vụ Phase 3.5 (Tiền xử lý)
+│   │   ├── segment.py          # Thuật toán tách nền (HSV, Otsu thresholding)
+│   │   ├── quality.py          # Thuật toán lọc nhiễu (Laplacian, tính tỷ lệ mô)
+│   │   ├── stain_norm.py       # Bộ chuẩn hóa màu sắc (Macenko method)
+│   │   └── extract_feat.py     # Script gom các bước trên và trích xuất ra HDF5
+│   │
+│   ├── data_loader/            # Module cung cấp dữ liệu cho quá trình Train
+│   │   ├── wsi_dataset.py      # Class xử lý trực tiếp file SVS (dùng cho trích xuất)
+│   │   └── h5_dataset.py       # Class Lazy-load đọc file HDF5 (dùng cho train MIL)
+│   │
+│   ├── models/                 # Định nghĩa kiến trúc mạng Neural
+│   │   ├── feature_extractor.py# Khởi tạo ResNet50/CTransPath bỏ lớp cuối
+│   │   └── mil_classifier.py   # Mô hình Multiple Instance Learning (Attention MIL)
+│   │
+│   ├── utils/                  # Các hàm hỗ trợ dùng chung
+│   │   ├── file_utils.py       # Hàm tạo thư mục, check file tồn tại...
+│   │   └── viz_utils.py        # Hàm vẽ bounding box, biểu diễn mask lên ảnh gốc
+│   │
+│   ├── train.py                # Script chính để chạy vòng lặp huấn luyện (Training loop)
+│   └── evaluate.py             # Script tính toán metrics (Accuracy, AUC, F1-score)
+│
+├── configs/                    # Thư mục chứa cấu hình chạy dự án
+│   └── default.yaml            # Lưu tham số tập trung (patch_size, batch_size, model_type...)
+│
+├── notebooks/                  # Chứa các file Jupyter Notebook (.ipynb)
+│   ├── 01_explore_slide.ipynb  # Nháp code để test thư viện OpenSlide, xem thử mask
+│   └── 02_test_dataloader.ipynb# Trực quan hóa thử các patch cắt ra xem có bị lỗi không
+│
+├── experiments/                # Nơi tự động sinh ra kết quả sau mỗi lần train
+│   ├── checkpoints/            # Lưu các file trọng số mô hình (.pth) tốt nhất
+│   └── logs/                   # Chứa file log hệ thống hoặc TensorBoard logs
+│
+├── .gitignore                  # Khai báo các file/thư mục không đưa lên Github (như /data)
+├── requirements.txt            # Danh sách các thư viện Python cần thiết
+└── README.md                   # Hướng dẫn tổng quan cách cài đặt và chạy dự án
