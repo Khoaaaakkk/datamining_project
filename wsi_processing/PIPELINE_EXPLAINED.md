@@ -1,208 +1,106 @@
-# WSI Processing – File & Flow Explanation
+# WSI Preprocessing v2 — Pipeline Explanation
 
-Tài liệu này giải thích chi tiết **mục đích**, **input**, **output** của từng file trong `wsi_processing`, và cách các flow ghép lại thành pipeline hoàn chỉnh.
+## Tổng quan dataflow (theo hình MMEF)
 
----
+1. **WSI (Whole Slide Image)** → đọc ở level gốc và level downsample.
+2. **Tissue Segmentation** → tạo mask mô ở level thấp (HSV + Otsu).
+3. **Patch Sampling** → chọn các toạ độ patch ở level 0 dựa trên mask.
+4. **Patch Quality Filter** → loại patch trắng/nhiễu/blur.
+5. **Stain Normalization (optional)** → chuẩn hoá màu theo Macenko.
+6. **Swin-L Embedding** → trích xuất embedding cho từng patch.
+7. **Lưu HDF5** → lưu `features` + `coords` để bước MIL/Survival downstream.
 
-## 1) Big picture
+## Mối liên kết giữa các file
 
-Pipeline của project gồm 3 luồng chính:
+- `src/wsi_feature_extraction.py` là entrypoint. Đọc config, duyệt danh sách slide, gọi pipeline.
+- `src/preprocessing/embedding_pipeline.py` giữ logic chính (segment → sample → filter → embed → save).
+- `src/preprocessing/tissue_segmentation.py` tạo tissue mask ở level thấp.
+- `src/preprocessing/patch_sampler.py` chuyển mask + downsample thành danh sách tọa độ patch.
+- `src/preprocessing/patch_quality.py` lọc patch bằng tỷ lệ trắng + blur + std.
+- `src/preprocessing/stain_normalization.py` Macenko normalization (tuỳ chọn).
+- `src/data_loader/wsi_patch_dataset.py` đọc patch theo coords (lazy open slide).
+- `src/models/feature_extractor.py` tạo Swin-L backbone từ timm.
+- `src/utils/file_utils.py` utilities quản lý file/dir.
 
-1. **Preprocessing + Feature Extraction**
-   - `raw_wsi` ➜ tissue mask ➜ lọc patch ➜ feature vectors ➜ `.h5`
-2. **MIL Training**
-   - `.h5` + `labels.csv` ➜ train Attention MIL ➜ checkpoint
-3. **Evaluation**
-   - checkpoint + `.h5` + labels ➜ Accuracy/F1
+## Chi tiết pipeline theo module
 
-Ngoài ra có flow phụ cho **notebook exploration** để test nhanh từng thành phần.
+### 1) Entry script
 
----
+`wsi_feature_extraction.py`:
 
-## 2) Folder-by-folder
+- Đọc `configs/default.yaml`.
+- Xác định thư mục dữ liệu (`raw_wsi_dir`, `h5_features_dir`, `masks_dir`).
+- Cho phép chạy 1 slide hoặc toàn bộ thư mục.
+- Gọi `WSIEmbeddingPipeline.process_slide()`.
 
-## `configs/`
+### 2) Tissue segmentation
 
-### `configs/default.yaml`
-- **Mục đích**: cấu hình tập trung cho toàn bộ pipeline.
-- **Input**: người dùng chỉnh path + hyperparameters.
-- **Output**: các script đọc file này để chạy nhất quán.
-- **Nhóm tham số chính**:
-  - `data`: đường dẫn dữ liệu/nhãn.
-  - `preprocessing`: patch size, ngưỡng tissue/quality, stain norm.
-  - `feature_extraction`: batch size, device, pretrained.
-  - `training`: tham số MIL.
+`tissue_segmentation.segment_tissue_hsv_otsu()`:
 
----
+- Tạo thumbnail ở level `seg_level`.
+- Chuyển HSV và dùng Otsu threshold trên kênh saturation.
+- Morphology open/close làm mượt mask.
 
-## `src/preprocessing/`
+### 3) Patch sampling
 
-### `src/preprocessing/segment.py`
-- **Mục đích**: tách vùng mô bằng HSV saturation + Otsu trên thumbnail.
-- **Input**:
-  - `openslide.OpenSlide`
-  - `level` segmentation.
-- **Output**:
-  - `mask` nhị phân (`uint8`, 0/255).
-  - `downsample` để map tọa độ level-0 sang level mask.
-- **Vai trò trong flow**: bước cổng vào, giảm mạnh số patch cần xử lý.
+`patch_sampler.generate_patch_coords()`:
 
-### `src/preprocessing/quality.py`
-- **Mục đích**: loại patch kém chất lượng (quá trắng, quá mờ).
-- **Input**: patch RGB dạng numpy array.
-- **Output**: boolean `is_valid_patch`.
-- **Metrics chính**:
-  - white ratio,
-  - Laplacian variance (blur),
-  - độ lệch chuẩn ảnh.
+- Duyệt theo lưới `patch_size` và `step_size` ở level 0.
+- Map tọa độ về mask level bằng `downsample`.
+- Chỉ giữ patch có tỷ lệ mô >= `tissue_threshold`.
 
-### `src/preprocessing/stain_norm.py`
-- **Mục đích**: chuẩn hóa màu (Macenko) để giảm domain shift giữa slide.
-- **Input**:
-  - patch RGB,
-  - (tùy chọn) ảnh reference H&E.
-- **Output**: patch RGB sau normalize.
-- **Lưu ý**: có fallback an toàn, nếu lỗi thì trả patch gốc.
+### 4) Patch quality filter
 
-### `src/preprocessing/extract_feature.py`
-- **Mục đích**: script orchestration end-to-end cho preprocessing + extract feature.
-- **Input**:
-  - config YAML,
-  - 1 slide (`--slide`) hoặc toàn bộ `raw_wsi_dir`.
-- **Output**:
-  - `data/h5_features/<slide_id>.h5` chứa:
-    - `features`: `[N, 2048]`
-    - `coords`: `[N, 2]`
-  - `data/masks/<slide_id>.png`
-  - report JSON ở `experiments/logs/`.
-- **Flow nội bộ**:
-  1) segmentation,
-  2) sinh candidate coords,
-  3) quality filtering,
-  4) (optional) stain norm,
-  5) batch inference ResNet50,
-  6) ghi HDF5 + metadata.
+`patch_quality.is_valid_patch()`:
 
----
+- Lọc patch quá trắng (`max_white_ratio`).
+- Lọc patch blur qua Laplacian variance (`min_laplacian_var`).
+- Lọc patch ít texture (`min_std`).
 
-## `src/data_loader/`
+### 5) Embedding extraction (Swin-L)
 
-### `src/data_loader/wsi_dataset.py`
-- **Mục đích**: lazy dataset đọc patch trực tiếp từ file WSI cho DataLoader.
-- **Input**: đường dẫn slide + danh sách tọa độ + patch size.
-- **Output**: `(patch_tensor, coord_tensor)`.
-- **Điểm quan trọng**: mở slide lazy trong worker để tương thích multiprocessing.
+`feature_extractor.build_feature_extractor()`:
 
-### `src/data_loader/h5_dataset.py`
-- **Mục đích**: load bag-level dữ liệu từ `.h5` để train/eval MIL.
-- **Input**:
-  - thư mục `.h5`,
-  - `labels.csv` (`slide_id,label`).
-- **Output**: dict gồm `slide_id`, `features`, `coords`, `label`.
-- **Vai trò**: cầu nối từ preprocessing sang training/evaluation.
+- Dùng timm model `swin_large_patch4_window7_224`.
+- Set `num_classes=0` để lấy embedding.
 
----
+`embedding_pipeline.extract_embeddings_batch()`:
 
-## `src/models/`
+- Tạo `DataLoader` từ `WSIPatchDataset`.
+- (Optional) stain normalization.
+- Chuẩn hoá theo ImageNet và chạy model.
+- Trả về `features` (N x D) và `coords` (N x 2).
 
-### `src/models/feature_extractor.py`
-- **Mục đích**: khởi tạo backbone trích đặc trưng (ResNet50 bỏ lớp FC).
-- **Input**: `pretrained` flag, `device`.
-- **Output**: model xuất vector feature chiều 2048.
+### 6) Output
 
-### `src/models/mil_classifier.py`
-- **Mục đích**: mô hình Attention MIL cho dự đoán slide-level.
-- **Input**: bag features `[N, D]` hoặc `[B, N, D]`.
-- **Output**: logits và attention weights.
-- **Ý nghĩa**: attention học patch quan trọng thay vì average toàn bộ patch.
+`embedding_pipeline.save_h5()`:
 
----
+- Lưu HDF5 với datasets: `features`, `coords`.
+- Ghi metadata: `patch_size`, `step_size`, `backbone`, `n_patches`, `feature_dim`.
 
-## `src/`
+## Cấu trúc thư mục (v2)
 
-### `src/train.py`
-- **Mục đích**: huấn luyện Attention MIL.
-- **Input**:
-  - features `.h5`,
-  - labels CSV,
-  - cấu hình training.
-- **Output**:
-  - checkpoint tốt nhất ở `experiments/checkpoints/best_mil.pth`.
+```text
+wsi_preprocessing_v2/
+├── configs/default.yaml
+├── src/
+│   ├── preprocessing/
+│   │   ├── tissue_segmentation.py
+│   │   ├── patch_sampler.py
+│   │   ├── patch_quality.py
+│   │   ├── stain_normalization.py
+│   │   └── embedding_pipeline.py
+│   ├── data_loader/wsi_patch_dataset.py
+│   ├── models/feature_extractor.py
+│   ├── utils/file_utils.py
+│   └── wsi_feature_extraction.py
+├── tests/test_patch_sampler.py
+├── requirements.txt
+└── README.md
+```
 
-### `src/evaluate.py`
-- **Mục đích**: đánh giá checkpoint MIL trên dataset label.
-- **Input**: checkpoint + `.h5` + labels.
-- **Output**: Accuracy, F1-weighted.
+## Notes mở rộng
 
----
-
-## `src/utils/`
-
-### `src/utils/file_utils.py`
-- **Mục đích**: helper xử lý path/thư mục và tạo `slide_id`.
-- **Input**: path string/Path.
-- **Output**: thư mục được tạo, danh sách file, stem chuẩn.
-
-### `src/utils/viz_utils.py`
-- **Mục đích**: hỗ trợ visualize mask overlay và grid patch.
-- **Input**: RGB image/mask/list patch.
-- **Output**: ảnh blend hoặc figure trực quan.
-
----
-
-## `notebooks/`
-
-### `notebooks/01_explore_slide.ipynb`
-- **Mục đích**: thử nhanh pipeline trên 1 slide, validate logic xử lý patch.
-- **Input**: một file `.svs`.
-- **Output**: `features.npy`, `coords.npy` (demo/prototype).
-
-### `notebooks/02_test_dataloader.ipynb`
-- **Mục đích**: kiểm tra `WSIPatchDataset` và DataLoader behavior.
-- **Input**: slide path + coords list.
-- **Output**: xác nhận patch loading hoạt động đúng.
-
----
-
-## `tests/`
-
-### `tests/test_file_utils.py`
-- Test tạo thư mục/parent và chuẩn hóa stem file.
-
-### `tests/test_quality.py`
-- Test `is_valid_patch` với patch giả lập (valid vs white patch).
-
-### `tests/test_mil_classifier.py`
-- Smoke test forward pass của `AttentionMIL`.
-
-### `tests/test_h5_dataset.py`
-- Test đọc `.h5` + labels CSV bằng dữ liệu temporary.
-
----
-
-## 3) End-to-end flow (step-by-step)
-
-1. **Đưa slide vào** `data/raw_wsi/`.
-2. Chạy `extract_feature.py`:
-   - sinh `mask` và `h5` cho từng slide.
-3. Chuẩn bị `data/labels/labels.csv` với cột `slide_id,label`.
-4. Chạy `train.py` để huấn luyện MIL.
-5. Chạy `evaluate.py` để tính metric.
-
----
-
-## 4) Input/Output contract ngắn gọn
-
-- **Input dữ liệu gốc**: `.svs/.tif/.ndpi`
-- **Input nhãn**: CSV (`slide_id,label`)
-- **Output preprocessing**: `.h5` (`features`, `coords`) + mask `.png`
-- **Output training**: `.pth`
-- **Output evaluation**: metrics text (Accuracy/F1)
-
----
-
-## 5) Ghi chú thực thi
-
-- Với dữ liệu lớn, hiệu năng phụ thuộc `batch_size`, `num_workers`, VRAM.
-- Bật stain normalization chỉ khi cần domain harmonization, vì tăng thời gian xử lý.
-- Khi train MIL, các slide không có nhãn hợp lệ (`label < 0`) sẽ bị bỏ qua.
+- Có thể thay `patch_size`, `step_size` theo paper để đồng bộ pipeline.
+- Có thể lưu thêm attention scores/thumbnail tuỳ mục đích downstream.
+- Nếu dùng GPU, bật `feature_extraction.amp = true` để tăng tốc.

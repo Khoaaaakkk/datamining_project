@@ -1,0 +1,3 @@
+# Windows-specific overrides for OpenSlide DLL lookup
+system:
+  openslide_dll_dir: tools/openslide/bin/openslide-bin-4.0.0.13-windows-x64/bin

@@ -12,7 +12,7 @@ def ensure_dir(path: str | Path) -> Path:
 
 
 def ensure_parent(path: str | Path) -> Path:
-	"""Create parent directory of a file path and return that parent path."""
+	"""Create parent directory of a file path and return parent Path."""
 	p = Path(path)
 	p.parent.mkdir(parents=True, exist_ok=True)
 	return p.parent
@@ -24,9 +24,7 @@ def list_files(directory: str | Path, suffixes: Iterable[str]) -> List[Path]:
 	suffix_set = {s.lower() for s in suffixes}
 	if not d.exists():
 		return []
-	return sorted(
-		[p for p in d.iterdir() if p.is_file() and p.suffix.lower() in suffix_set]
-	)
+	return sorted([p for p in d.iterdir() if p.is_file() and p.suffix.lower() in suffix_set])
 
 
 def stem_without_double_suffix(path: str | Path) -> str:

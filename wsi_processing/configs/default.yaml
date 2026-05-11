@@ -1,53 +1,29 @@
 data:
   raw_wsi_dir: data/raw_wsi
-  masks_dir: data/masks
   h5_features_dir: data/h5_features
-  labels_file: data/labels/labels.csv
+  masks_dir: data/masks
 
-gdc_download:
-  clinical_csv: data/reference/Final_Matched_Clinical.csv
-  submitter_id_column: submitter_id
-  submitter_id_whitelist: []
-  api_url: https://api.gdc.cancer.gov/files
-  data_format: SVS
-  batch_size: 5
-  max_files_per_patient: 10
-  max_patients: 115 # or null to download all patients in the whitelist
-  request_timeout_sec: 60
-  client_dir: /usr/local/bin
-  client_path: /usr/local/bin/gdc-client
-  manifest_dir: data/reference/manifests
-  downloaded_extensions: [".svs", ".tif", ".tiff", ".ndpi", ".mrxs", ".scn"]
-  skip_existing_h5: true
-  delete_processed_svs: true
-  report_path: experiments/logs/gdc_download_report.json
+system:
+  # Optional: Windows OpenSlide DLL directory
+  openslide_dll_dir: tools/openslide/bin/openslide-bin-4.0.0.13-windows-x64/bin
 
 preprocessing:
   patch_size: 256
   step_size: 256
   seg_level: 2
-  tissue_threshold: 0.20
-  max_white_ratio: 0.70
+  tissue_threshold: 0.2
+  max_white_ratio: 0.7
   min_laplacian_var: 50.0
   use_stain_normalization: false
-  reference_image: data/reference/reference_he_patch.png
+  reference_image: data/reference/normalizer_target.png
 
 feature_extraction:
   model_name: swin_large_patch4_window7_224
   pretrained: true
-  batch_size: 32
+  batch_size: 64
   num_workers: 2
   device: cuda
+  amp: true
 
-training:
-  feature_dim: 1536
-  attn_dim: 256
-  num_classes: 12
-  min_instances: 1
-  epochs: 5
-  lr: 0.0001
-  weight_decay: 0.00001
-  device: cuda
-
-checkpoint_dir: experiments/checkpoints
-report_path: experiments/logs/preprocessing_report.json
+output:
+  report_path: experiments/logs/preprocessing_report.json

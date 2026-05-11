@@ -1,0 +1,10 @@
+[
+  {
+    "slide_path": "C:\\Users\\Administrator\\Documents\\Code\\datamining_project\\data\\raw_wsi\\b2ab0307-7728-46e9-bae3-6e89e03d2dbf\\TCGA-CU-A0YO-01Z-00-DX1.847097EC-2E17-44BA-9162-6AA298B7CAFD.svs",
+    "candidate_patches": 49161,
+    "valid_patches": 47604,
+    "saved_h5": "data\\h5_features\\TCGA-CU-A0YO-01Z-00-DX1.847097EC-2E17-44BA-9162-6AA298B7CAFD.h5",
+    "saved_mask": "data\\masks\\TCGA-CU-A0YO-01Z-00-DX1.847097EC-2E17-44BA-9162-6AA298B7CAFD.png",
+    "status": "processed"
+  }
+]

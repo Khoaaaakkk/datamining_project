@@ -13,13 +13,7 @@ def segment_tissue_hsv_otsu(
 	morph_kernel: int = 5,
 	min_tissue_ratio: float = 0.01,
 ) -> Tuple[np.ndarray, float]:
-	"""
-	Segment tissue on low-resolution thumbnail via HSV saturation + Otsu.
-
-	Returns:
-		mask: uint8 binary mask (0/255) at selected level.
-		downsample: level downsample factor relative to level 0.
-	"""
+	"""Segment tissue on a low-resolution thumbnail using HSV saturation + Otsu."""
 	level = min(level, slide.level_count - 1)
 	w, h = slide.level_dimensions[level]
 	downsample = float(slide.level_downsamples[level])
@@ -40,14 +34,3 @@ def segment_tissue_hsv_otsu(
 		mask = np.zeros_like(mask, dtype=np.uint8)
 
 	return mask.astype(np.uint8), downsample
-
-
-def mask_has_tissue(mask: np.ndarray, x: int, y: int, patch_size: int, threshold: float = 0.2) -> bool:
-	"""Check tissue coverage inside a mask region."""
-	h, w = mask.shape
-	x2 = min(x + patch_size, w)
-	y2 = min(y + patch_size, h)
-	if x >= w or y >= h or x2 <= x or y2 <= y:
-		return False
-	region = mask[y:y2, x:x2]
-	return float((region > 0).mean()) >= threshold
