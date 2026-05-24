@@ -64,6 +64,16 @@ def main():
 		slide_id = stem_without_double_suffix(slide_path)
 		out_h5 = h5_dir / f"{slide_id}.h5"
 		out_mask = masks_dir / f"{slide_id}.png"
+		if out_h5.exists() and out_mask.exists():
+			report.append(
+				{
+					"slide_path": str(slide_path),
+					"status": "skipped_existing_outputs",
+					"saved_h5": str(out_h5),
+					"saved_mask": str(out_mask),
+				}
+			)
+			continue
 		if args.skip_existing and out_h5.exists():
 			report.append(
 				{

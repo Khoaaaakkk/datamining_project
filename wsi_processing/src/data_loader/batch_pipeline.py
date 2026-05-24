@@ -8,6 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
+import yaml
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+	sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.utils.file_utils import stem_without_double_suffix
+
 
 @dataclass
 class ManifestRecord:
@@ -86,6 +94,23 @@ def run_processing(
 	subprocess.run(command, check=True)
 
 
+def resolve_legacy_path(path: Path, legacy_root: str, new_root: str) -> Path:
+	if path.exists():
+		return path
+	path_str = str(path)
+	if legacy_root in path_str:
+		candidate = Path(path_str.replace(legacy_root, new_root))
+		if candidate.exists():
+			print(f"[WARN] Path not found, using {candidate} instead of {path}")
+			return candidate
+	return path
+
+
+def read_yaml(path: Path) -> dict:
+	with path.open("r", encoding="utf-8") as f:
+		return yaml.safe_load(f) or {}
+
+
 def delete_slide(slide_path: Path, dry_run: bool) -> None:
 	if dry_run:
 		print(f"[DRY-RUN] Delete {slide_path}")
@@ -118,12 +143,12 @@ def parse_args() -> argparse.Namespace:
 	)
 	parser.add_argument(
 		"--processor",
-		default="wsi_preprocessing_v2/src/wsi_feature_extraction.py",
+		default="wsi_processing/src/wsi_feature_extraction.py",
 		help="WSI processing entrypoint script.",
 	)
 	parser.add_argument(
 		"--config",
-		default="wsi_preprocessing_v2/configs/default.yaml",
+		default="wsi_processing/configs/default.yaml",
 		help="Config used by the processing pipeline.",
 	)
 	parser.add_argument(
@@ -162,18 +187,61 @@ def main() -> None:
 	raw_dir = Path(args.raw_dir)
 	processor_script = Path(args.processor)
 	config_path = Path(args.config)
+
+	processor_script = resolve_legacy_path(
+		processor_script,
+		legacy_root="wsi_preprocessing_v2",
+		new_root="wsi_processing",
+	)
+	config_path = resolve_legacy_path(
+		config_path,
+		legacy_root="wsi_preprocessing_v2",
+		new_root="wsi_processing",
+	)
 	output_dir = Path(args.output_dir) if args.output_dir else None
 
+	cfg = read_yaml(config_path)
+	data_cfg = cfg.get("data", {})
+	h5_dir = Path(output_dir or data_cfg.get("h5_features_dir", "data/h5_features"))
+	masks_dir = Path(data_cfg.get("masks_dir", "data/masks"))
+
 	records = read_manifest(manifest_path)
-	run_gdc_download(gdc_client, manifest_path, raw_dir, args.dry_run)
+
+	missing_files = 0
+	for index, record in enumerate(records, start=1):
+		slide_path = find_slide_path(raw_dir, record)
+		slide_id = stem_without_double_suffix(Path(record.filename))
+		out_h5 = h5_dir / f"{slide_id}.h5"
+		out_mask = masks_dir / f"{slide_id}.png"
+		if out_h5.exists() and out_mask.exists():
+			print(f"[SKIP] {index}/{len(records)} Đã xử lý (không tải lại): {record.filename}")
+			continue
+		if slide_path is None:
+			missing_files += 1
+		else:
+			print(f"[SKIP] {index}/{len(records)} Đã tải: {slide_path.name}")
+
+	if missing_files > 0:
+		run_gdc_download(gdc_client, manifest_path, raw_dir, args.dry_run)
+	else:
+		print("[INFO] Tất cả file đã tải/đã xử lý, bỏ qua bước download.")
 
 	processed = 0
-	for record in records:
-		slide_path = find_slide_path(raw_dir, record)
-		if slide_path is None:
-			print(f"[WARN] Missing slide for {record.file_id} ({record.filename})")
+	for index, record in enumerate(records, start=1):
+		slide_id = stem_without_double_suffix(Path(record.filename))
+		out_h5 = h5_dir / f"{slide_id}.h5"
+		out_mask = masks_dir / f"{slide_id}.png"
+		if out_h5.exists() and out_mask.exists():
+			print(f"[SKIP] {index}/{len(records)} Đã xử lý: {record.filename}")
+			processed += 1
 			continue
 
+		slide_path = find_slide_path(raw_dir, record)
+		if slide_path is None:
+			print(f"[WARN] {index}/{len(records)} Chưa tải được: {record.file_id} ({record.filename})")
+			continue
+
+		print(f"[INFO] {index}/{len(records)} Xử lý: {slide_path.name}")
 		run_processing(
 			processor_script,
 			config_path,

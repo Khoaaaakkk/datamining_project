@@ -2,6 +2,9 @@ data/
 .venv/
 .venv-1/
 .venv-2/
+.venv-3/
+outputs/
+.vscode
 tools/
 __pycache__/
 *.pyc

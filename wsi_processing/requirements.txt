@@ -9,6 +9,7 @@ Pillow>=9.0.0
 
 # 2. Whole Slide Image Reading
 openslide-python>=1.2.0
+openslide-bin>=4.0.0.13
 
 # 3. Deep Learning & Feature Extraction
 # Install a CUDA-enabled build of PyTorch that matches your GPU
@@ -29,6 +30,7 @@ pandas>=2.0.0
 # 6. Utilities & Configuration Management
 tqdm>=4.65.0
 PyYAML>=6.0
+requests>=2.31.0
 
 # 7. Experimentation & Visualization (optional)
 matplotlib>=3.5.0
