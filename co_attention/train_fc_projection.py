@@ -132,7 +132,7 @@ def parse_args() -> argparse.Namespace:
 	parser.add_argument(
 		"--output",
 		type=Path,
-		default=Path("outputs/fc_projection/fc_weights.pt"),
+		default=Path("../data/outputs/fc_projection/fc_weights.pt"),
 		help="Path to save encoder weights (state_dict).",
 	)
 	parser.add_argument(

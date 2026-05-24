@@ -10,7 +10,7 @@ import h5py
 import torch
 from torch import nn
 
-from feature_fusion_network.co_attention import GenomicGuidedCoAttention
+from co_attention.co_attention import GenomicGuidedCoAttention
 
 
 GenomicData = Union[Dict[str, Any], torch.Tensor]
@@ -36,6 +36,28 @@ def _load_submitter_ids(csv_path: Path) -> List[str]:
 		if "submitter_id" not in (reader.fieldnames or []):
 			raise ValueError("Submitter ID CSV must contain 'submitter_id' column")
 		return [str(row["submitter_id"]).strip() for row in reader]
+
+
+def _load_submitter_ids_from_manifest(manifest_path: Path) -> Dict[str, str]:
+	if not manifest_path.exists():
+		raise FileNotFoundError(f"Manifest not found: {manifest_path}")
+	submitter_ids: Dict[str, str] = {}
+	with manifest_path.open("r", encoding="utf-8") as handle:
+		for line_index, line in enumerate(handle):
+			if line_index == 0:
+				continue
+			parts = line.strip().split("\t")
+			if len(parts) < 2:
+				continue
+			filename = parts[1]
+			if len(filename) < 12:
+				continue
+			submitter_id = filename[:12]
+			if submitter_id not in submitter_ids:
+				submitter_ids[submitter_id] = filename
+	if not submitter_ids:
+		raise ValueError("No submitter IDs found in manifest")
+	return submitter_ids
 
 
 def _resolve_submitter_id(
@@ -69,6 +91,9 @@ def _resolve_submitter_id(
 
 def _find_h5_file(h5_dir: Path, submitter_id: str) -> Path:
 	matches = sorted(h5_dir.glob(f"{submitter_id}*.h5"))
+	dx_matches = [path for path in matches if "-DX" in path.name.upper()]
+	if dx_matches:
+		return dx_matches[0]
 	if not matches:
 		raise FileNotFoundError(
 			f"No .h5 files found for submitter id '{submitter_id}' in {h5_dir}"
@@ -185,6 +210,12 @@ def parse_args() -> argparse.Namespace:
 		help="Submitter ID (12 chars) to run. Defaults to first entry in pickle.",
 	)
 	parser.add_argument(
+		"--batch-manifest",
+		type=Path,
+		default=None,
+		help="Optional batch_000x.txt manifest to run co-attention for all submitters.",
+	)
+	parser.add_argument(
 		"--submitter-ids-csv",
 		type=Path,
 		default=Path("data/reference/Final_Matched_Clinical.csv"),
@@ -213,7 +244,7 @@ def parse_args() -> argparse.Namespace:
 	parser.add_argument(
 		"--output-dir",
 		type=Path,
-		default=Path("outputs/co_attention"),
+		default=Path("data/outputs/co_attention"),
 		help="Directory to save outputs (.pt).",
 	)
 	parser.add_argument(
@@ -230,50 +261,67 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
 	args = parse_args()
 	genomic_data = _load_genomic_features(args.genomic_pkl)
-	submitter_ids = None
+	all_submitter_ids = None
 	if not isinstance(genomic_data, dict):
-		submitter_ids = _load_submitter_ids(args.submitter_ids_csv)
-		if len(submitter_ids) != genomic_data.shape[0]:
+		all_submitter_ids = _load_submitter_ids(args.submitter_ids_csv)
+		if len(all_submitter_ids) != genomic_data.shape[0]:
 			raise ValueError(
 				"Submitter ID count does not match genomic tensor length"
 			)
-	
-	submitter_id, genomic_features = _resolve_submitter_id(
-		genomic_data,
-		args.submitter_id,
-		submitter_ids,
-	)
 
-	h5_path = _find_h5_file(args.h5_dir, submitter_id)
-	patch_features, dataset_name = _load_patch_features(
-		h5_path, args.dataset, args.max_patches
-	)
+	if args.batch_manifest:
+		manifest_map = _load_submitter_ids_from_manifest(args.batch_manifest)
+		submitter_ids = list(manifest_map.keys())
+	else:
+		manifest_map = {}
+		submitter_ids = [
+			_resolve_submitter_id(
+				genomic_data,
+				args.submitter_id,
+				all_submitter_ids,
+			)[0]
+		]
 
 	device = torch.device(args.device)
-	output, attn = run_co_attention(
-		genomic_features,
-		patch_features,
-		args.fc_weights,
-		device,
-	)
-
 	args.output_dir.mkdir(parents=True, exist_ok=True)
-	output_path = args.output_dir / f"{submitter_id}_co_attention.pt"
-	payload = {
-		"submitter_id": submitter_id,
-		"h5_file": h5_path.name,
-		"dataset": dataset_name,
-		"fc_weights": str(args.fc_weights) if args.fc_weights else None,
-		"output": output,
-		"attention": attn,
-	}
-	torch.save(payload, output_path)
+	for submitter_id in submitter_ids:
+		_, genomic_features = _resolve_submitter_id(
+			genomic_data,
+			submitter_id,
+			all_submitter_ids,
+		)
+		h5_path = _find_h5_file(args.h5_dir, submitter_id)
+		patch_features, dataset_name = _load_patch_features(
+			h5_path, args.dataset, args.max_patches
+		)
+		output, attn = run_co_attention(
+			genomic_features,
+			patch_features,
+			args.fc_weights,
+			device,
+		)
 
-	print(f"Submitter ID: {submitter_id}")
-	print(f"H5 file: {h5_path.name} (dataset: {dataset_name})")
-	print(f"Output shape: {tuple(output.shape)}")
-	print(f"Attention shape: {tuple(attn.shape)}")
-	print(f"Saved to: {output_path}")
+		if submitter_id in manifest_map:
+			name_prefix = manifest_map[submitter_id][12:24]
+			output_name = f"{submitter_id}{name_prefix}_co_attention.pt"
+		else:
+			output_name = f"{submitter_id}_co_attention.pt"
+		output_path = args.output_dir / output_name
+		payload = {
+			"submitter_id": submitter_id,
+			"h5_file": h5_path.name,
+			"dataset": dataset_name,
+			"fc_weights": str(args.fc_weights) if args.fc_weights else None,
+			"output": output,
+			"attention": attn,
+		}
+		torch.save(payload, output_path)
+
+		print(f"Submitter ID: {submitter_id}")
+		print(f"H5 file: {h5_path.name} (dataset: {dataset_name})")
+		print(f"Output shape: {tuple(output.shape)}")
+		print(f"Attention shape: {tuple(attn.shape)}")
+		print(f"Saved to: {output_path}")
 
 
 if __name__ == "__main__":
