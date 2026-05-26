@@ -16,7 +16,7 @@ def find_manifests(manifests_dir: Path, pattern: str) -> List[Path]:
 
 
 def parse_args() -> argparse.Namespace:
-	parser = argparse.ArgumentParser(description="Run multiple batch manifests sequentially.")
+	parser = argparse.ArgumentParser(description="Execute multiple batch manifests sequentially.")
 	parser.add_argument(
 		"--manifests-dir",
 		default="data/reference/manifests",
@@ -41,12 +41,12 @@ def parse_args() -> argparse.Namespace:
 	)
 	parser.add_argument(
 		"--batch-pipeline",
-		default="wsi_processing/src/data_loader/batch_pipeline.py",
+		default="wsi_preprocess/data_loader/batch_pipeline.py",
 		help="Path to the single-batch pipeline script.",
 	)
 	parser.add_argument(
 		"--config",
-		default="wsi_processing/configs/default.yaml",
+		default="configs/default.yaml",
 		help="Config file passed to the batch pipeline.",
 	)
 	parser.add_argument(
@@ -61,7 +61,7 @@ def parse_args() -> argparse.Namespace:
 	)
 	parser.add_argument(
 		"--processor",
-		default="wsi_processing/src/wsi_feature_extraction.py",
+		default="wsi_preprocess/wsi_feature_extraction.py",
 		help="WSI processing entrypoint script.",
 	)
 	parser.add_argument(
@@ -106,17 +106,17 @@ def main() -> None:
 	batch_pipeline = resolve_legacy_path(
 		batch_pipeline,
 		legacy_root="wsi_preprocessing_v2",
-		new_root="wsi_processing",
+		new_root="wsi_preprocess",
 	)
 	config_path = resolve_legacy_path(
 		Path(args.config),
 		legacy_root="wsi_preprocessing_v2",
-		new_root="wsi_processing",
+		new_root="configs",
 	)
 	processor_path = resolve_legacy_path(
 		Path(args.processor),
 		legacy_root="wsi_preprocessing_v2",
-		new_root="wsi_processing",
+		new_root="wsi_preprocess",
 	)
 
 	manifests = find_manifests(manifests_dir, args.pattern)

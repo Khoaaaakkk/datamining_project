@@ -136,6 +136,20 @@ def parse_args() -> argparse.Namespace:
 		help="Path to save encoder weights (state_dict).",
 	)
 	parser.add_argument(
+		"--model-output",
+		type=Path,
+		default=Path("../data/outputs/fc_projection/fc_autoencoder.pt"),
+		help="Path to save full autoencoder state_dict.",
+	)
+	parser.add_argument(
+		"--project-out",
+		type=Path,
+		default=None,
+		help=(
+			"Optional directory to save projected features (N, latent_dim) per H5 file."
+		),
+	)
+	parser.add_argument(
 		"--shuffle-files",
 		action="store_true",
 		help="Shuffle file order before sampling.",
@@ -182,6 +196,38 @@ def main() -> None:
 	args.output.parent.mkdir(parents=True, exist_ok=True)
 	torch.save(model.encoder.state_dict(), args.output)
 	print(f"Saved encoder weights to: {args.output}")
+
+	args.model_output.parent.mkdir(parents=True, exist_ok=True)
+	torch.save(model.state_dict(), args.model_output)
+	print(f"Saved full autoencoder weights to: {args.model_output}")
+
+	if args.project_out is not None:
+		model.eval()
+		args.project_out.mkdir(parents=True, exist_ok=True)
+		files = sorted(args.h5_dir.glob("*.h5"))
+		for path in files:
+			with h5py.File(path, "r") as handle:
+				if args.dataset not in handle:
+					continue
+				data = handle[args.dataset][()]
+			if data.ndim != 2:
+				continue
+			projected_batches = []
+			for start in range(0, data.shape[0], args.batch_size):
+				batch = torch.tensor(
+					data[start : start + args.batch_size],
+					dtype=torch.float32,
+					device=device,
+				)
+				with torch.no_grad():
+					z, _ = model(batch)
+				projected_batches.append(z.cpu())
+			if not projected_batches:
+				continue
+			projected = torch.cat(projected_batches, dim=0)
+			output_path = args.project_out / f"{path.stem}_projected.pt"
+			torch.save(projected, output_path)
+			print(f"Saved projected features to: {output_path}")
 
 
 if __name__ == "__main__":

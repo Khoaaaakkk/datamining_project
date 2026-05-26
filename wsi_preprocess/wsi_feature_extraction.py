@@ -11,7 +11,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
 	sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.utils.file_utils import ensure_dir, list_files, stem_without_double_suffix
+from wsi_preprocess.utils.file_utils import (
+	ensure_dir,
+	list_files,
+	stem_without_double_suffix,
+)
 
 
 def read_yaml(path: str | Path) -> Dict:
@@ -56,7 +60,10 @@ def main():
 	if len(slides) == 0:
 		raise FileNotFoundError(f"No slide files found in {raw_dir}")
 
-	from src.preprocessing.embedding_pipeline import WSIEmbeddingPipeline, save_report
+	from wsi_preprocess.preprocessing.embedding_pipeline import (
+		WSIEmbeddingPipeline,
+		save_report,
+	)
 
 	pipeline = WSIEmbeddingPipeline(cfg)
 	report = []

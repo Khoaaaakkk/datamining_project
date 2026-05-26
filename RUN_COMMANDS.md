@@ -43,8 +43,19 @@ C:/Users/Administrator/Documents/Code/datamining_project/.venv/Scripts/python.ex
 
 ```powershell
 C:/Users/Administrator/Documents/Code/datamining_project/.venv/Scripts/python.exe `
-  wsi_preprocessing_v2/src/data_loader/batch_pipeline.py `
+  wsi_processing/src/data_loader/batch_pipeline.py `
   --manifest data/reference/manifests/batch_0004.txt `
+  --config wsi_processing/configs/default.yaml
+```
+
+### 3.1) Chạy nhiều batch liên tiếp
+
+```powershell
+C:/Users/Administrator/Documents/Code/datamining_project/.venv/Scripts/python.exe `
+  wsi_processing/src/data_loader/run_batches.py `
+  --manifests-dir data/reference/manifests `
+  --start 1 `
+  --end 5 `
   --config wsi_preprocessing_v2/configs/default.yaml
 ```
 
@@ -52,22 +63,22 @@ Giữ file `.svs` sau xử lý:
 
 ```powershell
 C:/Users/Administrator/Documents/Code/datamining_project/.venv/Scripts/python.exe `
-  wsi_preprocessing_v2/src/data_loader/batch_pipeline.py `
+  wsi_processing/src/data_loader/batch_pipeline.py `
   --manifest data/reference/manifests/batch_0004.txt `
   --keep
 ```
 
 ## 4) Chạy pipeline trích xuất feature (v2)
 
-Ví dụ chạy 1 slide với `wsi_preprocessing_v2` và config mặc định.
+Ví dụ chạy 1 slide với `wsi_processing` và config mặc định.
 
 ```powershell
 # (khuyến nghị) set OpenSlide DLL dir trên Windows
 $env:OPENSLIDE_DLL_DIR = "C:\Users\Administrator\Documents\Code\datamining_project\tools\openslide\bin\openslide-bin-4.0.0.13-windows-x64\bin"
 
 C:/Users/Administrator/Documents/Code/datamining_project/.venv/Scripts/python.exe `
-  wsi_preprocessing_v2/src/wsi_feature_extraction.py `
-  --config wsi_preprocessing_v2/configs/default.yaml `
+  wsi_processing/src/wsi_feature_extraction.py `
+  --config wsi_processing/configs/default.yaml `
   --slide "C:\Users\Administrator\Documents\Code\datamining_project\data\raw_wsi\<your_slide>.svs"
 ```
 
@@ -81,8 +92,8 @@ $env:OPENSLIDE_DLL_DIR = "C:\Users\Administrator\Documents\Code\datamining_proje
 Get-ChildItem -Path '.\data\raw_wsi' -Filter '*.svs' -Recurse | ForEach-Object {
   $slidePath = $_.FullName
   C:/Users/Administrator/Documents/Code/datamining_project/.venv/Scripts/python.exe `
-    wsi_preprocessing_v2/src/wsi_feature_extraction.py `
-    --config wsi_preprocessing_v2/configs/default.yaml `
+    wsi_processing/src/wsi_feature_extraction.py `
+    --config wsi_processing/configs/default.yaml `
     --slide $slidePath
 }
 ```

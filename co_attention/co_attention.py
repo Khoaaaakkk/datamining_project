@@ -44,6 +44,7 @@ class GenomicGuidedCoAttention(nn.Module):
 		batch_size, g_len, d_q = q.shape
 		k_batch, n_len, d_k = k.shape
 		v_batch, v_len, d_v = v.shape
+		print(f"Q shape: {q.shape}, K shape: {k.shape}, V shape: {v.shape}")
 		if k_batch != batch_size or v_batch != batch_size:
 			raise ValueError("Batch size mismatch between Q, K, V")
 		if n_len != v_len:

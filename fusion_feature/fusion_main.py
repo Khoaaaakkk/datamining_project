@@ -3,7 +3,10 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-from fusion_feature.transformers_gap import GenomicBranch, WSIBranch
+try:
+	from .transformers_gap import GenomicBranch, WSIBranch
+except ImportError:  # pragma: no cover - fallback for script execution
+	from fusion_feature.transformers_gap import GenomicBranch, WSIBranch
 
 
 class MultimodalFusion(nn.Module):
@@ -24,6 +27,7 @@ class MultimodalFusion(nn.Module):
 
 
 if __name__ == "__main__":
+    # Mock input tensors
 	device = torch.device("cpu")
 	model = MultimodalFusion().to(device)
 	model.eval()

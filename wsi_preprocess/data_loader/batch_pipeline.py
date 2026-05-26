@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
 	sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.utils.file_utils import stem_without_double_suffix
+from wsi_preprocess.utils.file_utils import stem_without_double_suffix
 
 
 @dataclass
@@ -93,19 +93,6 @@ def run_processing(
 
 	subprocess.run(command, check=True)
 
-
-def resolve_legacy_path(path: Path, legacy_root: str, new_root: str) -> Path:
-	if path.exists():
-		return path
-	path_str = str(path)
-	if legacy_root in path_str:
-		candidate = Path(path_str.replace(legacy_root, new_root))
-		if candidate.exists():
-			print(f"[WARN] Path not found, using {candidate} instead of {path}")
-			return candidate
-	return path
-
-
 def read_yaml(path: Path) -> dict:
 	with path.open("r", encoding="utf-8") as f:
 		return yaml.safe_load(f) or {}
@@ -129,7 +116,7 @@ def parse_args() -> argparse.Namespace:
 	parser.add_argument(
 		"--manifest",
 		required=True,
-		help="Path to batch manifest (e.g., data/reference/manifests/batch_0004.txt)",
+		help="Path to batch manifest (e.g., data/reference/manifests/batch_000x.txt)",
 	)
 	parser.add_argument(
 		"--gdc-client",
@@ -143,12 +130,12 @@ def parse_args() -> argparse.Namespace:
 	)
 	parser.add_argument(
 		"--processor",
-		default="wsi_processing/src/wsi_feature_extraction.py",
+		default="wsi_preprocess/wsi_feature_extraction.py",
 		help="WSI processing entrypoint script.",
 	)
 	parser.add_argument(
 		"--config",
-		default="wsi_processing/configs/default.yaml",
+		default="configs/default.yaml",
 		help="Config used by the processing pipeline.",
 	)
 	parser.add_argument(
@@ -181,23 +168,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+	"""Pipeline Tải, xử lý ảnh, embedding sang vector đặc trưng (h5), remove slide sau khi xử lý
+	"""
 	args = parse_args()
 	manifest_path = Path(args.manifest)
 	gdc_client = Path(args.gdc_client)
 	raw_dir = Path(args.raw_dir)
 	processor_script = Path(args.processor)
 	config_path = Path(args.config)
-
-	processor_script = resolve_legacy_path(
-		processor_script,
-		legacy_root="wsi_preprocessing_v2",
-		new_root="wsi_processing",
-	)
-	config_path = resolve_legacy_path(
-		config_path,
-		legacy_root="wsi_preprocessing_v2",
-		new_root="wsi_processing",
-	)
 	output_dir = Path(args.output_dir) if args.output_dir else None
 
 	cfg = read_yaml(config_path)
@@ -208,6 +186,7 @@ def main() -> None:
 	records = read_manifest(manifest_path)
 
 	missing_files = 0
+	# Skip những file tải
 	for index, record in enumerate(records, start=1):
 		slide_path = find_slide_path(raw_dir, record)
 		slide_id = stem_without_double_suffix(Path(record.filename))
@@ -227,6 +206,7 @@ def main() -> None:
 		print("[INFO] Tất cả file đã tải/đã xử lý, bỏ qua bước download.")
 
 	processed = 0
+	# Skip những file đã xử lý
 	for index, record in enumerate(records, start=1):
 		slide_id = stem_without_double_suffix(Path(record.filename))
 		out_h5 = h5_dir / f"{slide_id}.h5"
@@ -242,6 +222,7 @@ def main() -> None:
 			continue
 
 		print(f"[INFO] {index}/{len(records)} Xử lý: {slide_path.name}")
+		# Xử lý ảnh và xuất file vector đặc trưng
 		run_processing(
 			processor_script,
 			config_path,
@@ -251,6 +232,7 @@ def main() -> None:
 			args.dry_run,
 		)
 
+  		# Xóa slide sau khi xử lý
 		if not args.keep:
 			delete_slide(slide_path, args.dry_run)
 

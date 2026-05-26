@@ -4,13 +4,26 @@ import argparse
 import csv
 import pickle
 from pathlib import Path
+import sys
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import h5py
 import torch
 from torch import nn
 
-from co_attention.co_attention import GenomicGuidedCoAttention
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+	sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+	from .train_fc_projection import LinearAutoEncoder
+except ImportError:  # pragma: no cover - fallback for script execution
+	from co_attention.train_fc_projection import LinearAutoEncoder
+
+try:
+	from .co_attention import GenomicGuidedCoAttention
+except ImportError:  # pragma: no cover - fallback for script execution
+	from co_attention import GenomicGuidedCoAttention
 
 
 GenomicData = Union[Dict[str, Any], torch.Tensor]
@@ -38,10 +51,10 @@ def _load_submitter_ids(csv_path: Path) -> List[str]:
 		return [str(row["submitter_id"]).strip() for row in reader]
 
 
-def _load_submitter_ids_from_manifest(manifest_path: Path) -> Dict[str, str]:
+def _load_submitter_ids_from_manifest(manifest_path: Path) -> Dict[str, Dict[str, str]]:
 	if not manifest_path.exists():
 		raise FileNotFoundError(f"Manifest not found: {manifest_path}")
-	submitter_ids: Dict[str, str] = {}
+	submitter_ids: Dict[str, Dict[str, str]] = {}
 	with manifest_path.open("r", encoding="utf-8") as handle:
 		for line_index, line in enumerate(handle):
 			if line_index == 0:
@@ -54,7 +67,10 @@ def _load_submitter_ids_from_manifest(manifest_path: Path) -> Dict[str, str]:
 				continue
 			submitter_id = filename[:12]
 			if submitter_id not in submitter_ids:
-				submitter_ids[submitter_id] = filename
+				submitter_ids[submitter_id] = {
+					"filename": filename,
+					"slide_id": filename[:24] if len(filename) >= 24 else filename,
+				}
 	if not submitter_ids:
 		raise ValueError("No submitter IDs found in manifest")
 	return submitter_ids
@@ -89,8 +105,14 @@ def _resolve_submitter_id(
 	return submitter_id, features[index]
 
 
-def _find_h5_file(h5_dir: Path, submitter_id: str) -> Path:
-	matches = sorted(h5_dir.glob(f"{submitter_id}*.h5"))
+def _find_h5_file(h5_dir: Path, submitter_id: str, slide_id: Optional[str]) -> Path:
+	patterns = []
+	if slide_id:
+		patterns.append(f"{slide_id}*.h5")
+	patterns.append(f"{submitter_id}*.h5")
+	matches: List[Path] = []
+	for pattern in patterns:
+		matches.extend(sorted(h5_dir.glob(pattern)))
 	dx_matches = [path for path in matches if "-DX" in path.name.upper()]
 	if dx_matches:
 		return dx_matches[0]
@@ -152,11 +174,20 @@ def _build_projection(
 	output_dim: int,
 	weights_path: Optional[Path],
 	device: torch.device,
-) -> nn.Linear:
+) -> nn.Module:
+	if weights_path is None:
+		layer = nn.Linear(input_dim, output_dim).to(device)
+		layer.eval()
+		return layer
+
+	state = torch.load(weights_path, map_location=device)
+	if any(key.startswith("encoder.") for key in state.keys()):
+		model = LinearAutoEncoder(input_dim, output_dim).to(device)
+		model.load_state_dict(state)
+		model.eval()
+		return model.encoder
 	layer = nn.Linear(input_dim, output_dim).to(device)
-	if weights_path is not None:
-		state = torch.load(weights_path, map_location=device)
-		layer.load_state_dict(state)
+	layer.load_state_dict(state)
 	layer.eval()
 	return layer
 
@@ -168,6 +199,7 @@ def run_co_attention(
 	device: torch.device,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
 	q = _to_tensor(genomic_features).to(device)
+	# Project patch features to the same dimension as genomic features (N, 1536) -> (N, 512)
 	patch_features = patch_features.to(device)
 	if patch_features.shape[-1] != q.shape[-1]:
 		proj = _build_projection(
@@ -210,7 +242,7 @@ def parse_args() -> argparse.Namespace:
 		help="Submitter ID (12 chars) to run. Defaults to first entry in pickle.",
 	)
 	parser.add_argument(
-		"--batch-manifest",
+		"--manifest",
 		type=Path,
 		default=None,
 		help="Optional batch_000x.txt manifest to run co-attention for all submitters.",
@@ -232,13 +264,13 @@ def parse_args() -> argparse.Namespace:
 	parser.add_argument(
 		"--max-patches",
 		type=int,
-		default=512,
+		default=200000,
 		help="Max number of patch embeddings to load.",
 	)
 	parser.add_argument(
 		"--device",
 		type=str,
-		default="cpu",
+		default="cuda" if torch.cuda.is_available() else "cpu",
 		help="Device to run on (cpu or cuda).",
 	)
 	parser.add_argument(
@@ -250,7 +282,8 @@ def parse_args() -> argparse.Namespace:
 	parser.add_argument(
 		"--fc-weights",
 		type=Path,
-		default=None,
+		# default=Path("data/outputs/fc_projection/fc_weights.pt"),
+		default=Path("data/outputs/fc_projection/fc_autoencoder.pt"),
 		help=(
 			"Optional path to Linear layer weights (state_dict) to project patch features."
 		),
@@ -269,8 +302,8 @@ def main() -> None:
 				"Submitter ID count does not match genomic tensor length"
 			)
 
-	if args.batch_manifest:
-		manifest_map = _load_submitter_ids_from_manifest(args.batch_manifest)
+	if args.manifest:
+		manifest_map = _load_submitter_ids_from_manifest(args.manifest)
 		submitter_ids = list(manifest_map.keys())
 	else:
 		manifest_map = {}
@@ -290,7 +323,9 @@ def main() -> None:
 			submitter_id,
 			all_submitter_ids,
 		)
-		h5_path = _find_h5_file(args.h5_dir, submitter_id)
+		manifest_entry = manifest_map.get(submitter_id)
+		slide_id = manifest_entry["slide_id"] if manifest_entry else None
+		h5_path = _find_h5_file(args.h5_dir, submitter_id, slide_id)
 		patch_features, dataset_name = _load_patch_features(
 			h5_path, args.dataset, args.max_patches
 		)
@@ -300,10 +335,17 @@ def main() -> None:
 			args.fc_weights,
 			device,
 		)
+		attn_flat = attn
+		if attn_flat.dim() == 3:
+			attn_flat = attn_flat.mean(dim=(0, 1))
+		elif attn_flat.dim() == 2:
+			attn_flat = attn_flat.mean(dim=0)
+		elif attn_flat.dim() != 1:
+			raise ValueError("attention weights must be 1D/2D/3D")
 
 		if submitter_id in manifest_map:
-			name_prefix = manifest_map[submitter_id][12:24]
-			output_name = f"{submitter_id}{name_prefix}_co_attention.pt"
+			slide_id = manifest_map[submitter_id]["slide_id"]
+			output_name = f"{slide_id}_co_attention.pt"
 		else:
 			output_name = f"{submitter_id}_co_attention.pt"
 		output_path = args.output_dir / output_name
@@ -314,6 +356,7 @@ def main() -> None:
 			"fc_weights": str(args.fc_weights) if args.fc_weights else None,
 			"output": output,
 			"attention": attn,
+			"attention_flat": attn_flat.cpu(),
 		}
 		torch.save(payload, output_path)
 

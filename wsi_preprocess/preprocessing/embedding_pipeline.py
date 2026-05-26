@@ -12,13 +12,13 @@ from PIL import Image
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.data_loader.wsi_patch_dataset import WSIPatchDataset
-from src.models.feature_extractor import build_feature_extractor, get_device
-from src.preprocessing.patch_quality import is_valid_patch
-from src.preprocessing.patch_sampler import generate_patch_coords
-from src.preprocessing.stain_normalization import MacenkoNormalizer
-from src.preprocessing.tissue_segmentation import segment_tissue_hsv_otsu
-from src.utils.file_utils import ensure_dir
+from wsi_preprocess.data_loader.wsi_patch_dataset import WSIPatchDataset
+from wsi_preprocess.models.feature_extractor import build_feature_extractor, get_device
+from wsi_preprocess.preprocessing.patch_quality import is_valid_patch
+from wsi_preprocess.preprocessing.patch_sampler import generate_patch_coords
+from wsi_preprocess.preprocessing.stain_normalization import MacenkoNormalizer
+from wsi_preprocess.preprocessing.tissue_segmentation import segment_tissue_hsv_otsu
+from wsi_preprocess.utils.file_utils import ensure_dir
 
 
 def _configure_openslide_dll() -> None:

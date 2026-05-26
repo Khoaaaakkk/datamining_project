@@ -11,27 +11,66 @@ Pillow>=9.0.0
 
 # 2. Whole Slide Image Reading
 openslide-python>=1.2.0
-     
+openslide-bin>=4.0.0.13
 # 3. Deep Learning & Feature Extraction
 # Lưu ý: Cài đặt bản PyTorch có hỗ trợ GPU phù hợp với CUDA của bạn
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 torch>=2.0.0
 torchvision>=0.15.0
+timm>=1.0.0
 
 # 4. Pathology Stain Normalization
 staintools>=2.1.2
-
-# spams==2.6.4.5 # có thể tải spams nếu muốn sử dụng thuật toán Vahadane
 spams-bin==2.6.13  # Dependency bắt buộc để chạy thuật toán Macenko
+# spams==2.6.4.5 # có thể tải spams nếu muốn sử dụng thuật toán Vahadane
 
 # 5. Data Engineering & Storage
 h5py>=3.8.0
-
+pandas>=2.0.0
 # 6. Utilities & Configuration Management
 tqdm>=4.65.0    # Hiển thị thanh tiến trình
 PyYAML>=6.0     # Đọc file cấu hình default.yaml
+requests>=2.31.0
 
 # 7. Experimentation & Visualization (Dành cho thư mục notebooks/)
 jupyter>=1.0.0
 matplotlib>=3.5.0
+
+
+# ==========================================
+# WSI PREPROCESSING V2 REQUIREMENTS
+# ==========================================
+# run on Python 3.10+
+# 1. Core Data Processing & Computer Vision
+# numpy==1.25.2
+# opencv-python>=4.6.0
+# Pillow>=9.0.0
+
+# # 2. Whole Slide Image Reading
+# openslide-python>=1.2.0
+# openslide-bin>=4.0.0.13
+
+# # 3. Deep Learning & Feature Extraction
+# # Install a CUDA-enabled build of PyTorch that matches your GPU
+# # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# torch>=2.0.0
+# torchvision>=0.15.0
+# timm>=1.0.0
+
+# # 4. Pathology Stain Normalization
+# staintools>=2.1.2
+# spams-bin==2.6.13
+
+# # 5. Data Engineering & Storage
+# h5py>=3.8.0
+# pandas>=2.0.0
+
+# # 6. Utilities & Configuration Management
+# tqdm>=4.65.0
+# PyYAML>=6.0
+# requests>=2.31.0
+
+# # 7. Experimentation & Visualization (optional)
+# matplotlib>=3.5.0

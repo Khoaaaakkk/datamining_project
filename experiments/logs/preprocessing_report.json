@@ -1,10 +1,10 @@
 [
   {
-    "slide_path": "data\\raw_wsi\\42bce75e-5b87-43b8-81bb-b1d3666dcc8b\\TCGA-B6-A0X4-01Z-00-DX1.4B7914DE-3436-4D69-9BC6-F6419D3CC518.svs",
-    "candidate_patches": 42311,
-    "valid_patches": 41996,
-    "saved_h5": "data\\h5_features\\TCGA-B6-A0X4-01Z-00-DX1.4B7914DE-3436-4D69-9BC6-F6419D3CC518.h5",
-    "saved_mask": "data\\masks\\TCGA-B6-A0X4-01Z-00-DX1.4B7914DE-3436-4D69-9BC6-F6419D3CC518.png",
+    "slide_path": "data\\raw_wsi\\3fe3dff3-4ffa-4989-aa9d-237fccaeab15\\TCGA-XF-AAMH-01Z-00-DX1.AB5E1C7D-C3BF-4A69-B614-0ED69F8A3C07.svs",
+    "candidate_patches": 53901,
+    "valid_patches": 53663,
+    "saved_h5": "data\\h5_features\\BLCA\\TCGA-XF-AAMH-01Z-00-DX1.AB5E1C7D-C3BF-4A69-B614-0ED69F8A3C07.h5",
+    "saved_mask": "data\\masks\\TCGA-XF-AAMH-01Z-00-DX1.AB5E1C7D-C3BF-4A69-B614-0ED69F8A3C07.png",
     "status": "processed"
   }
 ]

@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.preprocessing.patch_sampler import generate_patch_coords, mask_has_tissue
+from wsi_preprocess.preprocessing.patch_sampler import generate_patch_coords, mask_has_tissue
 
 
 def test_mask_has_tissue_basic():

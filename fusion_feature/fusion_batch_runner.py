@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import argparse
 import csv
+import sys
 import pickle
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
-from fusion_feature.fusion_main import MultimodalFusion
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+try:
+	from .fusion_main import MultimodalFusion
+except ImportError:  # pragma: no cover - fallback for script execution
+	from fusion_feature.fusion_main import MultimodalFusion
 
 
 GenomicData = Union[Dict[str, Any], torch.Tensor]
@@ -110,7 +117,7 @@ def parse_args() -> argparse.Namespace:
 		description="Run multimodal fusion for submitters in a batch manifest."
 	)
 	parser.add_argument(
-		"--batch-manifest",
+		"--manifest",
 		type=Path,
 		required=True,
 		help="Path to batch_000x.txt manifest file.",
@@ -162,7 +169,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
 	args = parse_args()
-	manifest_map = _load_submitter_ids_from_manifest(args.batch_manifest)
+	manifest_map = _load_submitter_ids_from_manifest(args.manifest)
 	submitter_ids = list(manifest_map.keys())
 	if args.max_submitters is not None:
 		submitter_ids = submitter_ids[: args.max_submitters]
